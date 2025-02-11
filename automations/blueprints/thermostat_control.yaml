@@ -1,0 +1,156 @@
+blueprint:
+  name: Advanced Thermostat Control with Schedules
+  description: >
+    Complete thermostat control with schedules, holiday mode, and manual overrides.
+    Supports multiple climate entities and includes import/export functionality.
+  domain: automation
+  source_url: <https://github.com/jayjay3108/Scripts/tree/Main/ha/automations/blueprints>
+  input:
+    thermostats:
+      name: Thermostats
+      description: Select the thermostats to control
+      selector:
+        target:
+          entity:
+            domain: climate
+    schedule_weekday:
+      name: Weekday Schedule
+      description: Schedule for Monday to Friday
+      default: >
+        [
+          {"time": "06:00", "temp": 21.0},
+          {"time": "09:00", "temp": 19.0},
+          {"time": "17:00", "temp": 21.5},
+          {"time": "22:00", "temp": 18.0}
+        ]
+      selector:
+        object:
+    schedule_weekend:
+      name: Weekend Schedule
+      description: Schedule for Saturday and Sunday
+      default: >
+        [
+          {"time": "08:00", "temp": 21.0},
+          {"time": "23:00", "temp": 18.0}
+        ]
+      selector:
+        object:
+    holiday_schedule:
+      name: Holiday Schedule
+      description: Schedule when holiday mode is active
+      default: >
+        [
+          {"time": "00:00", "temp": 17.0}
+        ]
+      selector:
+        object:
+    holiday_mode:
+      name: Holiday Mode Switch
+      description: Switch entity to activate holiday mode
+      selector:
+        entity:
+          domain: input_boolean
+    temp_override:
+      name: Temperature Override Helper
+      description: Helper entity to store manual temperature overrides
+      selector:
+        entity:
+          domain: input_number
+    heating_enable:
+      name: Heating Enable Switch
+      description: Switch to completely enable/disable heating
+      selector:
+        entity:
+          domain: input_boolean
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: time_pattern
+    minutes: "/5"
+  - platform: state
+    entity_id: !input holiday_mode
+  - platform: state
+    entity_id: !input temp_override
+  - platform: state
+    entity_id: !input heating_enable
+
+variables:
+  holiday_mode: !input holiday_mode
+  temp_override: !input temp_override
+  heating_enable: !input heating_enable
+  schedule_weekday: !input schedule_weekday
+  schedule_weekend: !input schedule_weekend
+  holiday_schedule: !input holiday_schedule
+
+action:
+  - choose:
+      # Check if heating is disabled
+      - conditions:
+          - condition: state
+            entity_id: !input heating_enable
+            state: 'off'
+        sequence:
+          - service: climate.set_hvac_mode
+            target: !input thermostats
+            data:
+              hvac_mode: 'off'
+          - stop: "Heating disabled"
+
+      # Check for manual override
+      - conditions:
+          - condition: numeric_state
+            entity_id: !input temp_override
+            above: 0
+        sequence:
+          - service: climate.set_temperature
+            target: !input thermostats
+            data:
+              temperature: "{{ states(temp_override) }}"
+
+      # Check for holiday mode
+      - conditions:
+          - condition: state
+            entity_id: !input holiday_mode
+            state: 'on'
+        sequence:
+          - variables:
+              current_schedule: "{{ holiday_schedule }}"
+          - service: climate.set_temperature
+            target: !input thermostats
+            data:
+              temperature: >
+                {% set now_time = now().strftime('%H:%M') %}
+                {% set schedule = current_schedule | from_json %}
+                {% set temp = namespace(value=17.0) %}
+                {% for period in schedule %}
+                  {% if now_time >= period.time %}
+                    {% set temp.value = period.temp %}
+                  {% endif %}
+                {% endfor %}
+                {{ temp.value }}
+
+      # Regular schedule
+      - conditions: []
+        sequence:
+          - variables:
+              current_schedule: >
+                {% if now().weekday() < 5 %}
+                  {{ schedule_weekday }}
+                {% else %}
+                  {{ schedule_weekend }}
+                {% endif %}
+          - service: climate.set_temperature
+            target: !input thermostats
+            data:
+              temperature: >
+                {% set now_time = now().strftime('%H:%M') %}
+                {% set schedule = current_schedule | from_json %}
+                {% set temp = namespace(value=18.0) %}
+                {% for period in schedule %}
+                  {% if now_time >= period.time %}
+                    {% set temp.value = period.temp %}
+                  {% endif %}
+                {% endfor %}
+                {{ temp.value }}
