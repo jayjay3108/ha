@@ -4,6 +4,7 @@ blueprint:
     Complete thermostat control with schedules, holiday mode, and manual overrides.
     Supports multiple climate entities and includes import/export functionality.
   domain: automation
+  source_url: <https://github.com/jayjay3108/ha/tree/main/automations/blueprints>
   input:
     thermostats:
       name: Thermostats
