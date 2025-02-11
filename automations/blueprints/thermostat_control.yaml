@@ -16,32 +16,19 @@ blueprint:
     schedule_weekday:
       name: Weekday Schedule
       description: Schedule for Monday to Friday
-      default: >
-        [
-          {"time": "06:00", "temp": 21.0},
-          {"time": "09:00", "temp": 19.0},
-          {"time": "17:00", "temp": 21.5},
-          {"time": "22:00", "temp": 18.0}
-        ]
+      default: '[{"time": "06:00", "temp": 21.0}, {"time": "09:00", "temp": 19.0}, {"time": "17:00", "temp": 21.5}, {"time": "22:00", "temp": 18.0}]'
       selector:
         object:
     schedule_weekend:
       name: Weekend Schedule
       description: Schedule for Saturday and Sunday
-      default: >
-        [
-          {"time": "08:00", "temp": 21.0},
-          {"time": "23:00", "temp": 18.0}
-        ]
+      default: '[{"time": "08:00", "temp": 21.0}, {"time": "23:00", "temp": 18.0}]'
       selector:
         object:
     holiday_schedule:
       name: Holiday Schedule
       description: Schedule when holiday mode is active
-      default: >
-        [
-          {"time": "00:00", "temp": 17.0}
-        ]
+      default: '[{"time": "00:00", "temp": 17.0}]'
       selector:
         object:
     holiday_mode:
@@ -86,7 +73,6 @@ variables:
 
 action:
   - choose:
-      # Check if heating is disabled
       - conditions:
           - condition: state
             entity_id: !input heating_enable
@@ -98,7 +84,6 @@ action:
               hvac_mode: 'off'
           - stop: "Heating disabled"
 
-      # Check for manual override
       - conditions:
           - condition: numeric_state
             entity_id: !input temp_override
@@ -109,7 +94,6 @@ action:
             data:
               temperature: "{{ states(temp_override) }}"
 
-      # Check for holiday mode
       - conditions:
           - condition: state
             entity_id: !input holiday_mode
@@ -131,26 +115,24 @@ action:
                 {% endfor %}
                 {{ temp.value }}
 
-      # Regular schedule
-      - conditions: []
-        sequence:
-          - variables:
-              current_schedule: >
-                {% if now().weekday() < 5 %}
-                  {{ schedule_weekday }}
-                {% else %}
-                  {{ schedule_weekend }}
-                {% endif %}
-          - service: climate.set_temperature
-            target: !input thermostats
-            data:
-              temperature: >
-                {% set now_time = now().strftime('%H:%M') %}
-                {% set schedule = current_schedule | from_json %}
-                {% set temp = namespace(value=18.0) %}
-                {% for period in schedule %}
-                  {% if now_time >= period.time %}
-                    {% set temp.value = period.temp %}
-                  {% endif %}
-                {% endfor %}
-                {{ temp.value }}
+    default:
+      - variables:
+          current_schedule: >
+            {% if now().weekday() < 5 %}
+              {{ schedule_weekday }}
+            {% else %}
+              {{ schedule_weekend }}
+            {% endif %}
+      - service: climate.set_temperature
+        target: !input thermostats
+        data:
+          temperature: >
+            {% set now_time = now().strftime('%H:%M') %}
+            {% set schedule = current_schedule | from_json %}
+            {% set temp = namespace(value=18.0) %}
+            {% for period in schedule %}
+              {% if now_time >= period.time %}
+                {% set temp.value = period.temp %}
+              {% endif %}
+            {% endfor %}
+            {{ temp.value }}
